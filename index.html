@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Picker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            z-index: 100;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        #toolbar h1 {
+            font-size: 18px;
+            color: #e94560;
+        }
+
+        #info {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        #coords {
+            font-family: monospace;
+            background: #0f3460;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        #zoomLevel {
+            font-family: monospace;
+            color: #4ecca3;
+        }
+
+        #output {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #16213e;
+            padding: 10px 20px;
+            border-top: 2px solid #0f3460;
+            z-index: 100;
+        }
+
+        #output h3 {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #4ecca3;
+        }
+
+        #selections {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .selection-item {
+            background: #0f3460;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .selection-item:hover {
+            background: #1a4a7a;
+        }
+
+        .selection-item .name {
+            color: #4ecca3;
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .selection-item .name:hover {
+            background: rgba(78, 204, 163, 0.2);
+        }
+
+        .selection-item .coords {
+            color: #aaa;
+            cursor: pointer;
+        }
+
+        .selection-item .coords:hover {
+            color: #fff;
+        }
+
+        .selection-item .btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 5px;
+            font-size: 12px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .selection-item .btn:hover {
+            opacity: 1;
+        }
+
+        .selection-item .duplicate-btn {
+            color: #4ecca3;
+        }
+
+        .selection-item .delete-btn {
+            color: #e94560;
+        }
+
+        #copyAll {
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: auto;
+        }
+
+        #copyAll:hover {
+            background: #3db892;
+        }
+
+        #clearAll {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #canvasContainer {
+            position: fixed;
+            top: 50px;
+            bottom: 140px;
+            left: 0;
+            right: 0;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+
+        #dropZone {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 3px dashed #4ecca3;
+            border-radius: 20px;
+            padding: 60px;
+            text-align: center;
+            color: #4ecca3;
+        }
+
+        #dropZone.hidden {
+            display: none;
+        }
+
+        #dropZone h2 {
+            margin-bottom: 10px;
+        }
+
+        #canvas {
+            position: absolute;
+            image-rendering: pixelated;
+        }
+
+        #overlayCanvas {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        #toast {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4ecca3;
+            color: #1a1a2e;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 200;
+        }
+
+        #toast.show {
+            opacity: 1;
+        }
+
+        #help {
+            font-size: 11px;
+            color: #888;
+        }
+
+        /* Modal para nombre */
+        #nameModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+        }
+
+        #nameModal.show {
+            display: flex;
+        }
+
+        #nameModal .modal-content {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #4ecca3;
+        }
+
+        #nameModal h3 {
+            margin-bottom: 15px;
+            color: #4ecca3;
+        }
+
+        #nameModal input {
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #0f3460;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #eee;
+            width: 250px;
+            font-family: monospace;
+        }
+
+        #nameModal input:focus {
+            outline: none;
+            border-color: #4ecca3;
+        }
+
+        #nameModal .modal-buttons {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        #nameModal button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #nameModal .save-btn {
+            background: #4ecca3;
+            color: #1a1a2e;
+        }
+
+        #nameModal .cancel-btn {
+            background: #666;
+            color: #eee;
+        }
+
+        #selectionInfo {
+            font-family: monospace;
+            color: #aaa;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <h1>🎨 Sprite Picker</h1>
+        <span id="info">Arrastra una imagen para empezar</span>
+        <span id="coords">X: 0, Y: 0</span>
+        <span id="zoomLevel">Zoom: 1x</span>
+        <span id="help">Rueda: zoom | Drag: seleccionar | Click etiqueta: mover | Dblclick: renombrar | Alt+Drag: pan</span>
+    </div>
+
+    <div id="canvasContainer">
+        <div id="dropZone">
+            <h2>📁 Arrastra tu sprite sheet aquí</h2>
+            <p>o haz click para seleccionar archivo</p>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        </div>
+        <canvas id="canvas"></canvas>
+        <canvas id="overlayCanvas"></canvas>
+    </div>
+
+    <div id="output">
+        <div style="display: flex; align-items: center; margin-bottom: 8px; gap: 10px;">
+            <h3 style="margin: 0;">Selecciones</h3>
+            <button id="clearAll">🗑 Limpiar</button>
+            <button id="copyAll">📋 Copiar todo</button>
+        </div>
+        <div id="selections"></div>
+    </div>
+
+    <div id="toast">¡Copiado!</div>
+
+    <div id="nameModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Nombre del sprite</h3>
+            <div id="selectionInfo"></div>
+            <input type="text" id="spriteName" placeholder="ej: bird, pipe, ground...">
+            <div class="modal-buttons">
+                <button class="cancel-btn" id="cancelName">Cancelar</button>
+                <button class="save-btn" id="saveName">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlayCanvas');
+        const octx = overlay.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const coordsDisplay = document.getElementById('coords');
+        const zoomDisplay = document.getElementById('zoomLevel');
+        const infoDisplay = document.getElementById('info');
+        const selectionsDiv = document.getElementById('selections');
+        const copyAllBtn = document.getElementById('copyAll');
+        const clearAllBtn = document.getElementById('clearAll');
+        const toast = document.getElementById('toast');
+        const nameModal = document.getElementById('nameModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const spriteNameInput = document.getElementById('spriteName');
+        const selectionInfoDiv = document.getElementById('selectionInfo');
+        const saveNameBtn = document.getElementById('saveName');
+        const cancelNameBtn = document.getElementById('cancelName');
+
+        let img = null;
+        let zoom = 1;
+        let offsetX = 0;
+        let offsetY = 0;
+        let isSelecting = false;
+        let isPanning = false;
+        let isDraggingSelection = false;
+        let draggedSelectionIndex = -1;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // Guardar origen de selección en coordenadas de IMAGEN (no pantalla)
+        let selStartPixelX = 0;
+        let selStartPixelY = 0;
+        let selEndPixelX = 0;
+        let selEndPixelY = 0;
+
+        let mouseX = 0;
+        let mouseY = 0;
+        let selections = [];
+        let pendingSelection = null;
+        let editingSelectionIndex = -1; // Para renombrar
+
+        // Drag & Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', e => loadImage(e.target.files[0]));
+
+        container.addEventListener('dragover', e => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#e94560';
+        });
+
+        container.addEventListener('dragleave', () => {
+            dropZone.style.borderColor = '#4ecca3';
+        });
+
+        container.addEventListener('drop', e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                img = new Image();
+                img.onload = () => {
+                    dropZone.classList.add('hidden');
+                    infoDisplay.textContent = `${file.name} (${img.width}x${img.height})`;
+
+                    zoom = 1;
+                    offsetX = (container.clientWidth - img.width) / 2;
+                    offsetY = (container.clientHeight - img.height) / 2;
+
+                    resizeCanvases();
+                    draw();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resizeCanvases() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            overlay.width = container.clientWidth;
+            overlay.height = container.clientHeight;
+        }
+
+        // Encontrar selección bajo el ratón (en su etiqueta)
+        function findSelectionAtLabel(mx, my) {
+            for (let i = selections.length - 1; i >= 0; i--) {
+                const sel = selections[i];
+                const x = offsetX + sel.x * zoom;
+                const y = offsetY + sel.y * zoom;
+
+                ctx.font = 'bold 12px monospace';
+                const textWidth = ctx.measureText(sel.name).width + 8;
+
+                // Área de la etiqueta
+                if (mx >= x && mx <= x + textWidth && my >= y - 18 && my <= y - 2) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // Encontrar selección bajo el ratón (en su área)
+        function findSelectionAtArea(mx, my) {
+            for (let i = selections.length - 1; i >= 0; i--) {
+                const sel = selections[i];
+                const x = offsetX + sel.x * zoom;
+                const y = offsetY + sel.y * zoom;
+                const w = sel.w * zoom;
+                const h = sel.h * zoom;
+
+                if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        function draw() {
+            if (!img) return;
+
+            ctx.imageSmoothingEnabled = false;
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Patrón de transparencia
+            const patternSize = Math.max(8, 8 * zoom);
+            const imgX = Math.floor(offsetX);
+            const imgY = Math.floor(offsetY);
+            const imgW = img.width * zoom;
+            const imgH = img.height * zoom;
+
+            ctx.fillStyle = '#2a2a3e';
+            ctx.fillRect(imgX, imgY, imgW, imgH);
+            ctx.fillStyle = '#3a3a4e';
+            for (let y = 0; y < imgH; y += patternSize * 2) {
+                for (let x = 0; x < imgW; x += patternSize * 2) {
+                    ctx.fillRect(imgX + x, imgY + y, patternSize, patternSize);
+                    ctx.fillRect(imgX + x + patternSize, imgY + y + patternSize, patternSize, patternSize);
+                }
+            }
+
+            // Dibujar imagen
+            ctx.drawImage(img, offsetX, offsetY, img.width * zoom, img.height * zoom);
+
+            // Grid de píxeles si zoom >= 6
+            if (zoom >= 6) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+                ctx.lineWidth = 1;
+
+                for (let x = 0; x <= img.width; x++) {
+                    const screenX = Math.floor(offsetX + x * zoom) + 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(screenX, offsetY);
+                    ctx.lineTo(screenX, offsetY + img.height * zoom);
+                    ctx.stroke();
+                }
+
+                for (let y = 0; y <= img.height; y++) {
+                    const screenY = Math.floor(offsetY + y * zoom) + 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(offsetX, screenY);
+                    ctx.lineTo(offsetX + img.width * zoom, screenY);
+                    ctx.stroke();
+                }
+            }
+
+            // Dibujar selecciones guardadas
+            selections.forEach((sel, i) => {
+                const x = offsetX + sel.x * zoom;
+                const y = offsetY + sel.y * zoom;
+                const w = sel.w * zoom;
+                const h = sel.h * zoom;
+
+                // Fondo semi-transparente
+                ctx.fillStyle = i === draggedSelectionIndex ? 'rgba(233, 69, 96, 0.3)' : 'rgba(78, 204, 163, 0.3)';
+                ctx.fillRect(x, y, w, h);
+
+                // Borde
+                ctx.strokeStyle = i === draggedSelectionIndex ? '#e94560' : '#4ecca3';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, w, h);
+
+                // Etiqueta con nombre
+                ctx.font = 'bold 12px monospace';
+                const labelText = sel.name;
+                const textWidth = ctx.measureText(labelText).width + 8;
+                ctx.fillStyle = i === draggedSelectionIndex ? '#e94560' : '#16213e';
+                ctx.fillRect(x, y - 18, textWidth, 16);
+                ctx.fillStyle = i === draggedSelectionIndex ? '#fff' : '#4ecca3';
+                ctx.fillText(labelText, x + 4, y - 6);
+            });
+        }
+
+        function drawOverlay() {
+            octx.clearRect(0, 0, overlay.width, overlay.height);
+
+            if (!img) return;
+
+            // Líneas de guía (cruz roja)
+            octx.strokeStyle = 'rgba(233, 69, 96, 0.8)';
+            octx.lineWidth = 1;
+
+            octx.beginPath();
+            octx.moveTo(0, mouseY + 0.5);
+            octx.lineTo(overlay.width, mouseY + 0.5);
+            octx.stroke();
+
+            octx.beginPath();
+            octx.moveTo(mouseX + 0.5, 0);
+            octx.lineTo(mouseX + 0.5, overlay.height);
+            octx.stroke();
+
+            // Selección actual (usando coordenadas de imagen)
+            if (isSelecting) {
+                const x1 = offsetX + selStartPixelX * zoom;
+                const y1 = offsetY + selStartPixelY * zoom;
+                const x2 = offsetX + selEndPixelX * zoom;
+                const y2 = offsetY + selEndPixelY * zoom;
+
+                const x = Math.min(x1, x2);
+                const y = Math.min(y1, y2);
+                const w = Math.abs(x2 - x1);
+                const h = Math.abs(y2 - y1);
+
+                const pixelX = Math.min(selStartPixelX, selEndPixelX);
+                const pixelY = Math.min(selStartPixelY, selEndPixelY);
+                const pixelW = Math.abs(selEndPixelX - selStartPixelX);
+                const pixelH = Math.abs(selEndPixelY - selStartPixelY);
+
+                // Fondo semi-transparente
+                octx.fillStyle = 'rgba(233, 69, 96, 0.2)';
+                octx.fillRect(x, y, w, h);
+
+                // Borde
+                octx.strokeStyle = '#e94560';
+                octx.lineWidth = 2;
+                octx.strokeRect(x, y, w, h);
+
+                // Etiqueta con info
+                octx.fillStyle = '#e94560';
+                octx.font = 'bold 14px monospace';
+                octx.fillText(`[${pixelX}, ${pixelY}, ${pixelW}, ${pixelH}]`, x, y - 8);
+            }
+        }
+
+        // Mouse events
+        container.addEventListener('mousemove', e => {
+            const rect = container.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+
+            const pixelX = Math.floor((mouseX - offsetX) / zoom);
+            const pixelY = Math.floor((mouseY - offsetY) / zoom);
+            coordsDisplay.textContent = `X: ${pixelX}, Y: ${pixelY}`;
+
+            // Cambiar cursor si está sobre etiqueta
+            const labelIndex = findSelectionAtLabel(mouseX, mouseY);
+            if (labelIndex >= 0 && !isSelecting && !isPanning) {
+                container.style.cursor = 'move';
+            } else if (!isSelecting && !isPanning && !isDraggingSelection) {
+                container.style.cursor = 'crosshair';
+            }
+
+            if (isPanning) {
+                offsetX += e.movementX;
+                offsetY += e.movementY;
+                draw();
+            }
+
+            if (isDraggingSelection && draggedSelectionIndex >= 0) {
+                const sel = selections[draggedSelectionIndex];
+                sel.x = Math.round(pixelX - dragOffsetX);
+                sel.y = Math.round(pixelY - dragOffsetY);
+
+                // Clamp dentro de la imagen
+                sel.x = Math.max(0, Math.min(img.width - sel.w, sel.x));
+                sel.y = Math.max(0, Math.min(img.height - sel.h, sel.y));
+
+                updateSelectionsUI();
+                draw();
+            }
+
+            if (isSelecting) {
+                // Actualizar fin de selección en coordenadas de imagen
+                selEndPixelX = Math.round((mouseX - offsetX) / zoom);
+                selEndPixelY = Math.round((mouseY - offsetY) / zoom);
+            }
+
+            drawOverlay();
+        });
+
+        container.addEventListener('mousedown', e => {
+            const rect = container.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            if (e.button === 1 || (e.button === 0 && e.altKey)) {
+                // Pan
+                isPanning = true;
+                container.style.cursor = 'grabbing';
+                e.preventDefault();
+            } else if (e.button === 0) {
+                // Comprobar si click en etiqueta de selección
+                const labelIndex = findSelectionAtLabel(mx, my);
+                if (labelIndex >= 0) {
+                    // Empezar a arrastrar selección
+                    isDraggingSelection = true;
+                    draggedSelectionIndex = labelIndex;
+                    const sel = selections[labelIndex];
+                    const pixelX = Math.floor((mx - offsetX) / zoom);
+                    const pixelY = Math.floor((my - offsetY) / zoom);
+                    dragOffsetX = pixelX - sel.x;
+                    dragOffsetY = pixelY - sel.y;
+                    container.style.cursor = 'move';
+                    draw();
+                } else {
+                    // Nueva selección - guardar en coordenadas de IMAGEN
+                    isSelecting = true;
+                    selStartPixelX = Math.round((mx - offsetX) / zoom);
+                    selStartPixelY = Math.round((my - offsetY) / zoom);
+                    selEndPixelX = selStartPixelX;
+                    selEndPixelY = selStartPixelY;
+                }
+            }
+        });
+
+        container.addEventListener('mouseup', e => {
+            if (isPanning) {
+                isPanning = false;
+                container.style.cursor = 'crosshair';
+            }
+
+            if (isDraggingSelection) {
+                isDraggingSelection = false;
+                draggedSelectionIndex = -1;
+                container.style.cursor = 'crosshair';
+                draw();
+            }
+
+            if (isSelecting) {
+                isSelecting = false;
+
+                const x = Math.min(selStartPixelX, selEndPixelX);
+                const y = Math.min(selStartPixelY, selEndPixelY);
+                const w = Math.abs(selEndPixelX - selStartPixelX);
+                const h = Math.abs(selEndPixelY - selStartPixelY);
+
+                if (w > 1 && h > 1) {
+                    pendingSelection = { x, y, w, h };
+                    editingSelectionIndex = -1;
+                    modalTitle.textContent = 'Nombre del sprite';
+                    selectionInfoDiv.textContent = `Coordenadas: [${x}, ${y}, ${w}, ${h}]`;
+                    spriteNameInput.value = `sprite${selections.length + 1}`;
+                    nameModal.classList.add('show');
+                    spriteNameInput.focus();
+                    spriteNameInput.select();
+                }
+
+                drawOverlay();
+            }
+        });
+
+        container.addEventListener('mouseleave', () => {
+            isPanning = false;
+            container.style.cursor = 'crosshair';
+            octx.clearRect(0, 0, overlay.width, overlay.height);
+        });
+
+        // Doble click para renombrar
+        container.addEventListener('dblclick', e => {
+            const rect = container.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const labelIndex = findSelectionAtLabel(mx, my);
+            if (labelIndex >= 0) {
+                // Renombrar
+                editingSelectionIndex = labelIndex;
+                const sel = selections[labelIndex];
+                modalTitle.textContent = 'Renombrar sprite';
+                selectionInfoDiv.textContent = `Coordenadas: [${sel.x}, ${sel.y}, ${sel.w}, ${sel.h}]`;
+                spriteNameInput.value = sel.name;
+                pendingSelection = null;
+                nameModal.classList.add('show');
+                spriteNameInput.focus();
+                spriteNameInput.select();
+            }
+        });
+
+        // Modal handlers
+        saveNameBtn.addEventListener('click', saveSelection);
+        cancelNameBtn.addEventListener('click', closeModal);
+
+        spriteNameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                saveSelection();
+            } else if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        function closeModal() {
+            nameModal.classList.remove('show');
+            pendingSelection = null;
+            editingSelectionIndex = -1;
+        }
+
+        function saveSelection() {
+            const name = spriteNameInput.value.trim() || `sprite${selections.length + 1}`;
+
+            if (editingSelectionIndex >= 0) {
+                // Renombrar existente
+                selections[editingSelectionIndex].name = name;
+                showToast('Nombre actualizado');
+            } else if (pendingSelection) {
+                // Nueva selección
+                selections.push({
+                    name,
+                    x: pendingSelection.x,
+                    y: pendingSelection.y,
+                    w: pendingSelection.w,
+                    h: pendingSelection.h
+                });
+                showToast('Selección guardada');
+            }
+
+            closeModal();
+            updateSelectionsUI();
+            draw();
+        }
+
+        // Zoom con rueda - mantiene origen de selección
+        container.addEventListener('wheel', e => {
+            e.preventDefault();
+
+            const rect = container.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const imgX = (mx - offsetX) / zoom;
+            const imgY = (my - offsetY) / zoom;
+
+            const delta = e.deltaY > 0 ? 0.8 : 1.25;
+            const newZoom = Math.max(0.25, Math.min(64, zoom * delta));
+
+            offsetX = mx - imgX * newZoom;
+            offsetY = my - imgY * newZoom;
+            zoom = newZoom;
+
+            zoomDisplay.textContent = `Zoom: ${zoom.toFixed(1)}x`;
+            draw();
+            drawOverlay();
+        });
+
+        function updateSelectionsUI() {
+            selectionsDiv.innerHTML = '';
+            selections.forEach((sel, i) => {
+                const div = document.createElement('div');
+                div.className = 'selection-item';
+
+                // Nombre (doble click para editar)
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'name';
+                nameSpan.textContent = sel.name;
+                nameSpan.title = 'Doble click para renombrar';
+                nameSpan.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    editingSelectionIndex = i;
+                    modalTitle.textContent = 'Renombrar sprite';
+                    selectionInfoDiv.textContent = `Coordenadas: [${sel.x}, ${sel.y}, ${sel.w}, ${sel.h}]`;
+                    spriteNameInput.value = sel.name;
+                    pendingSelection = null;
+                    nameModal.classList.add('show');
+                    spriteNameInput.focus();
+                    spriteNameInput.select();
+                });
+
+                // Coordenadas (click para copiar)
+                const coordsSpan = document.createElement('span');
+                coordsSpan.className = 'coords';
+                coordsSpan.textContent = `[${sel.x}, ${sel.y}, ${sel.w}, ${sel.h}]`;
+                coordsSpan.title = 'Click para copiar';
+                coordsSpan.addEventListener('click', () => {
+                    copyToClipboard(`${sel.name}: [${sel.x}, ${sel.y}, ${sel.w}, ${sel.h}],`);
+                });
+
+                // Duplicar
+                const duplicateBtn = document.createElement('button');
+                duplicateBtn.className = 'btn duplicate-btn';
+                duplicateBtn.textContent = '📋';
+                duplicateBtn.title = 'Duplicar';
+                duplicateBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const newSel = { ...sel, name: sel.name + '_copy' };
+                    selections.push(newSel);
+                    updateSelectionsUI();
+                    draw();
+                    showToast('Selección duplicada');
+                });
+
+                // Eliminar
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn delete-btn';
+                deleteBtn.textContent = '🗑';
+                deleteBtn.title = 'Eliminar';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selections.splice(i, 1);
+                    updateSelectionsUI();
+                    draw();
+                    showToast('Selección eliminada');
+                });
+
+                div.appendChild(nameSpan);
+                div.appendChild(coordsSpan);
+                div.appendChild(duplicateBtn);
+                div.appendChild(deleteBtn);
+                selectionsDiv.appendChild(div);
+            });
+        }
+
+        copyAllBtn.addEventListener('click', () => {
+            if (selections.length === 0) {
+                showToast('No hay selecciones');
+                return;
+            }
+
+            const text = selections.map(sel =>
+                `    ${sel.name}: [${sel.x}, ${sel.y}, ${sel.w}, ${sel.h}],`
+            ).join('\n');
+
+            copyToClipboard(`const spriteRegions = {\n${text}\n};`);
+        });
+
+        clearAllBtn.addEventListener('click', () => {
+            if (selections.length === 0) return;
+            if (confirm('¿Borrar todas las selecciones?')) {
+                selections = [];
+                updateSelectionsUI();
+                draw();
+                showToast('Selecciones borradas');
+            }
+        });
+
+        function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('¡Copiado!');
+                }).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('¡Copiado!');
+            } catch (err) {
+                showToast('Error al copiar');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvases();
+            draw();
+        });
+
+        container.addEventListener('contextmenu', e => e.preventDefault());
+
+        resizeCanvases();
+    </script>
+</body>
+</html>
