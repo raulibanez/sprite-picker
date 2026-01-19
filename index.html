@@ -385,7 +385,7 @@
         <span id="info">Drag an image to start</span>
         <span id="coords">X: 0, Y: 0</span>
         <span id="zoomLevel">Zoom: 1x</span>
-        <span id="help">Wheel: zoom | Drag: select | Click label: move | Dblclick: rename | Alt+Drag: pan | Ctrl+V: paste</span>
+        <span id="help">Wheel: zoom | Drag: select | Ctrl+click: auto-detect | Alt+Drag: pan | Ctrl+V: paste</span>
         <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
             <label for="bgOpacity" style="font-size: 11px; color: #888;">BG:</label>
             <input type="range" id="bgOpacity" min="0" max="100" value="50" style="width: 80px; cursor: pointer;">
@@ -466,6 +466,7 @@
         let offsetX = 0;
         let offsetY = 0;
         let isSelecting = false;
+        let isCtrlSelecting = false; // Ctrl+drag for auto-detect in area
         let isPanning = false;
         let isDraggingSelection = false;
         let isResizingSelection = false;
@@ -762,7 +763,7 @@
             octx.stroke();
 
             // Current selection (using image coordinates)
-            if (isSelecting) {
+            if (isSelecting || isCtrlSelecting) {
                 const x1 = offsetX + selStartPixelX * zoom;
                 const y1 = offsetY + selStartPixelY * zoom;
                 const x2 = offsetX + selEndPixelX * zoom;
@@ -778,19 +779,21 @@
                 const pixelW = Math.abs(selEndPixelX - selStartPixelX);
                 const pixelH = Math.abs(selEndPixelY - selStartPixelY);
 
-                // Semi-transparent background
-                octx.fillStyle = 'rgba(233, 69, 96, 0.2)';
+                // Semi-transparent background (different color for Ctrl mode)
+                octx.fillStyle = isCtrlSelecting ? 'rgba(78, 204, 163, 0.2)' : 'rgba(233, 69, 96, 0.2)';
                 octx.fillRect(x, y, w, h);
 
                 // Border
-                octx.strokeStyle = '#e94560';
+                octx.strokeStyle = isCtrlSelecting ? '#4ecca3' : '#e94560';
                 octx.lineWidth = 2;
+                octx.setLineDash(isCtrlSelecting ? [5, 5] : []);
                 octx.strokeRect(x, y, w, h);
+                octx.setLineDash([]);
 
                 // Label with info
-                octx.fillStyle = '#e94560';
+                octx.fillStyle = isCtrlSelecting ? '#4ecca3' : '#e94560';
                 octx.font = 'bold 14px monospace';
-                const label = formatCoords(pixelX, pixelY, pixelW, pixelH);
+                const label = isCtrlSelecting ? `Auto: ${formatCoords(pixelX, pixelY, pixelW, pixelH)}` : formatCoords(pixelX, pixelY, pixelW, pixelH);
                 octx.fillText(label, x, y - 8);
             }
         }
@@ -826,7 +829,7 @@
             }
 
             // Alt key pressed during selection = pan mode
-            if (e.altKey && (isSelecting || isDraggingSelection || isResizingSelection)) {
+            if (e.altKey && (isSelecting || isCtrlSelecting || isDraggingSelection || isResizingSelection)) {
                 offsetX += e.movementX;
                 offsetY += e.movementY;
                 draw();
@@ -866,7 +869,7 @@
                 draw();
             }
 
-            if (isSelecting) {
+            if (isSelecting || isCtrlSelecting) {
                 // Update selection end in image coordinates
                 selEndPixelX = Math.round((mouseX - offsetX) / zoom);
                 selEndPixelY = Math.round((mouseY - offsetY) / zoom);
@@ -909,6 +912,13 @@
                     dragOffsetY = pixelY - sel.y;
                     container.style.cursor = 'move';
                     draw();
+                } else if (e.ctrlKey) {
+                    // Ctrl+click/drag for auto-detect sprites
+                    isCtrlSelecting = true;
+                    selStartPixelX = Math.round((mx - offsetX) / zoom);
+                    selStartPixelY = Math.round((my - offsetY) / zoom);
+                    selEndPixelX = selStartPixelX;
+                    selEndPixelY = selStartPixelY;
                 } else {
                     // New selection - save in IMAGE coordinates
                     isSelecting = true;
@@ -947,6 +957,54 @@
                 draw();
             }
 
+            if (isCtrlSelecting) {
+                isCtrlSelecting = false;
+
+                const x = Math.min(selStartPixelX, selEndPixelX);
+                const y = Math.min(selStartPixelY, selEndPixelY);
+                const w = Math.abs(selEndPixelX - selStartPixelX);
+                const h = Math.abs(selEndPixelY - selStartPixelY);
+
+                if (w > 1 && h > 1) {
+                    // Ctrl+drag: detect all sprites in area and merge bounds
+                    const detected = detectSpritesInArea(x, y, w, h);
+                    if (detected) {
+                        pendingSelection = detected;
+                        editingSelectionIndex = -1;
+                        modalTitle.textContent = 'Sprite Name';
+                        selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
+                        spriteNameInput.value = `sprite${selections.length + 1}`;
+                        nameModal.classList.add('show');
+                        spriteNameInput.focus();
+                        spriteNameInput.select();
+                    } else {
+                        showToast('No sprites detected in area');
+                    }
+                } else if (img) {
+                    // Ctrl+click: detect single sprite at this pixel
+                    const clickX = selStartPixelX;
+                    const clickY = selStartPixelY;
+
+                    if (clickX >= 0 && clickX < img.width && clickY >= 0 && clickY < img.height) {
+                        const detected = detectSpriteAt(clickX, clickY);
+                        if (detected) {
+                            pendingSelection = detected;
+                            editingSelectionIndex = -1;
+                            modalTitle.textContent = 'Sprite Name';
+                            selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
+                            spriteNameInput.value = `sprite${selections.length + 1}`;
+                            nameModal.classList.add('show');
+                            spriteNameInput.focus();
+                            spriteNameInput.select();
+                        } else {
+                            showToast('No sprite at this position');
+                        }
+                    }
+                }
+
+                drawOverlay();
+            }
+
             if (isSelecting) {
                 isSelecting = false;
 
@@ -965,25 +1023,6 @@
                     nameModal.classList.add('show');
                     spriteNameInput.focus();
                     spriteNameInput.select();
-                } else if (img) {
-                    // Single click - detect sprite at this pixel
-                    const clickX = selStartPixelX;
-                    const clickY = selStartPixelY;
-
-                    // Check if click is inside image bounds
-                    if (clickX >= 0 && clickX < img.width && clickY >= 0 && clickY < img.height) {
-                        const detected = detectSpriteAt(clickX, clickY);
-                        if (detected) {
-                            pendingSelection = detected;
-                            editingSelectionIndex = -1;
-                            modalTitle.textContent = 'Sprite Name';
-                            selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
-                            spriteNameInput.value = `sprite${selections.length + 1}`;
-                            nameModal.classList.add('show');
-                            spriteNameInput.focus();
-                            spriteNameInput.select();
-                        }
-                    }
                 }
 
                 drawOverlay();
@@ -1239,6 +1278,95 @@
 
             if (w >= 2 && h >= 2) {
                 return { x: minX, y: minY, w, h };
+            }
+            return null;
+        }
+
+        // Detect all sprites within an area and merge their bounds
+        function detectSpritesInArea(areaX, areaY, areaW, areaH) {
+            if (!img) return null;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+
+            const visited = new Array(img.width * img.height).fill(false);
+
+            function isTransparent(x, y) {
+                if (x < 0 || x >= img.width || y < 0 || y >= img.height) return true;
+                const idx = (y * img.width + x) * 4;
+                return data[idx + 3] < 128;
+            }
+
+            // Flood fill from a starting point
+            function floodFill(startX, startY) {
+                const stack = [[startX, startY]];
+                let minX = startX, maxX = startX, minY = startY, maxY = startY;
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const idx = y * img.width + x;
+
+                    if (x < 0 || x >= img.width || y < 0 || y >= img.height) continue;
+                    if (visited[idx]) continue;
+                    if (isTransparent(x, y)) continue;
+
+                    visited[idx] = true;
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+
+                    stack.push([x + 1, y]);
+                    stack.push([x - 1, y]);
+                    stack.push([x, y + 1]);
+                    stack.push([x, y - 1]);
+                }
+
+                return { minX, maxX, minY, maxY };
+            }
+
+            // Clamp area to image bounds
+            const startX = Math.max(0, areaX);
+            const startY = Math.max(0, areaY);
+            const endX = Math.min(img.width, areaX + areaW);
+            const endY = Math.min(img.height, areaY + areaH);
+
+            // Find all sprites that touch the area
+            let globalMinX = Infinity, globalMaxX = -Infinity;
+            let globalMinY = Infinity, globalMaxY = -Infinity;
+            let foundAny = false;
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    const idx = y * img.width + x;
+                    if (!visited[idx] && !isTransparent(x, y)) {
+                        const bounds = floodFill(x, y);
+                        const w = bounds.maxX - bounds.minX + 1;
+                        const h = bounds.maxY - bounds.minY + 1;
+
+                        if (w >= 2 && h >= 2) {
+                            globalMinX = Math.min(globalMinX, bounds.minX);
+                            globalMaxX = Math.max(globalMaxX, bounds.maxX);
+                            globalMinY = Math.min(globalMinY, bounds.minY);
+                            globalMaxY = Math.max(globalMaxY, bounds.maxY);
+                            foundAny = true;
+                        }
+                    }
+                }
+            }
+
+            if (foundAny) {
+                return {
+                    x: globalMinX,
+                    y: globalMinY,
+                    w: globalMaxX - globalMinX + 1,
+                    h: globalMaxY - globalMinY + 1
+                };
             }
             return null;
         }
