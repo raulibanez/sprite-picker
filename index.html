@@ -269,84 +269,6 @@
             color: #888;
         }
 
-        /* Modal for naming */
-        #nameModal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.7);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 300;
-        }
-
-        #nameModal.show {
-            display: flex;
-        }
-
-        #nameModal .modal-content {
-            background: #16213e;
-            padding: 20px;
-            border-radius: 8px;
-            border: 2px solid #4ecca3;
-        }
-
-        #nameModal h3 {
-            margin-bottom: 15px;
-            color: #4ecca3;
-        }
-
-        #nameModal input {
-            padding: 10px;
-            font-size: 16px;
-            border: 2px solid #0f3460;
-            border-radius: 4px;
-            background: #1a1a2e;
-            color: #eee;
-            width: 250px;
-            font-family: monospace;
-        }
-
-        #nameModal input:focus {
-            outline: none;
-            border-color: #4ecca3;
-        }
-
-        #nameModal .modal-buttons {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        #nameModal button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        #nameModal .save-btn {
-            background: #4ecca3;
-            color: #1a1a2e;
-        }
-
-        #nameModal .cancel-btn {
-            background: #666;
-            color: #eee;
-        }
-
-        #selectionInfo {
-            font-family: monospace;
-            color: #aaa;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-
         #contextMenu {
             position: fixed;
             background: #16213e;
@@ -385,7 +307,7 @@
         <span id="info">Drag an image to start</span>
         <span id="coords">X: 0, Y: 0</span>
         <span id="zoomLevel">Zoom: 1x</span>
-        <span id="help">Wheel: zoom | Drag: select | Ctrl+click: auto-detect | Alt+Drag: pan | Ctrl+V: paste</span>
+        <span id="help">Drag: select | Ctrl: auto-detect | Alt: pan | Wheel: zoom | Dblclick label: rename | Ctrl+V: paste</span>
         <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
             <label for="bgOpacity" style="font-size: 11px; color: #888;">BG:</label>
             <input type="range" id="bgOpacity" min="0" max="100" value="50" style="width: 80px; cursor: pointer;">
@@ -416,18 +338,6 @@
 
     <div id="toast">Copied!</div>
 
-    <div id="nameModal">
-        <div class="modal-content">
-            <h3 id="modalTitle">Sprite Name</h3>
-            <div id="selectionInfo"></div>
-            <input type="text" id="spriteName" placeholder="e.g.: bird, pipe, ground...">
-            <div class="modal-buttons">
-                <button class="cancel-btn" id="cancelName">Cancel</button>
-                <button class="save-btn" id="saveName">Save</button>
-            </div>
-        </div>
-    </div>
-
     <div id="contextMenu">
         <button id="contextDelete">🗑 Delete sprite</button>
     </div>
@@ -449,12 +359,6 @@
         const autoDetectBtn = document.getElementById('autoDetect');
         const formatToggleBtn = document.getElementById('formatToggle');
         const toast = document.getElementById('toast');
-        const nameModal = document.getElementById('nameModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const spriteNameInput = document.getElementById('spriteName');
-        const selectionInfoDiv = document.getElementById('selectionInfo');
-        const saveNameBtn = document.getElementById('saveName');
-        const cancelNameBtn = document.getElementById('cancelName');
         const bgOpacitySlider = document.getElementById('bgOpacity');
         const contextMenu = document.getElementById('contextMenu');
         const contextDeleteBtn = document.getElementById('contextDelete');
@@ -487,8 +391,8 @@
         let mouseX = 0;
         let mouseY = 0;
         let selections = [];
-        let pendingSelection = null;
-        let editingSelectionIndex = -1; // For renaming
+        let editingSelectionIndex = -1; // For inline renaming
+        let inlineEditInput = null; // The input element for inline editing
 
         // Drag & Drop
         dropZone.addEventListener('click', (e) => {
@@ -969,14 +873,7 @@
                     // Ctrl+drag: detect all sprites in area and merge bounds
                     const detected = detectSpritesInArea(x, y, w, h);
                     if (detected) {
-                        pendingSelection = detected;
-                        editingSelectionIndex = -1;
-                        modalTitle.textContent = 'Sprite Name';
-                        selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
-                        spriteNameInput.value = `sprite${selections.length + 1}`;
-                        nameModal.classList.add('show');
-                        spriteNameInput.focus();
-                        spriteNameInput.select();
+                        addSelection(detected.x, detected.y, detected.w, detected.h);
                     } else {
                         showToast('No sprites detected in area');
                     }
@@ -988,14 +885,7 @@
                     if (clickX >= 0 && clickX < img.width && clickY >= 0 && clickY < img.height) {
                         const detected = detectSpriteAt(clickX, clickY);
                         if (detected) {
-                            pendingSelection = detected;
-                            editingSelectionIndex = -1;
-                            modalTitle.textContent = 'Sprite Name';
-                            selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
-                            spriteNameInput.value = `sprite${selections.length + 1}`;
-                            nameModal.classList.add('show');
-                            spriteNameInput.focus();
-                            spriteNameInput.select();
+                            addSelection(detected.x, detected.y, detected.w, detected.h);
                         } else {
                             showToast('No sprite at this position');
                         }
@@ -1014,15 +904,8 @@
                 const h = Math.abs(selEndPixelY - selStartPixelY);
 
                 if (w > 1 && h > 1) {
-                    // Normal drag selection
-                    pendingSelection = { x, y, w, h };
-                    editingSelectionIndex = -1;
-                    modalTitle.textContent = 'Sprite Name';
-                    selectionInfoDiv.textContent = `Coordinates: ${formatCoords(x, y, w, h)}`;
-                    spriteNameInput.value = `sprite${selections.length + 1}`;
-                    nameModal.classList.add('show');
-                    spriteNameInput.focus();
-                    spriteNameInput.select();
+                    // Normal drag selection - add immediately with auto name
+                    addSelection(x, y, w, h);
                 }
 
                 drawOverlay();
@@ -1035,7 +918,17 @@
             octx.clearRect(0, 0, overlay.width, overlay.height);
         });
 
-        // Double click to rename
+        // Add a new selection with auto-generated name
+        function addSelection(x, y, w, h) {
+            selections.push({
+                name: `sprite${selections.length + 1}`,
+                x, y, w, h
+            });
+            updateSelectionsUI();
+            draw();
+        }
+
+        // Double click to rename inline
         container.addEventListener('dblclick', e => {
             const rect = container.getBoundingClientRect();
             const mx = e.clientX - rect.left;
@@ -1043,59 +936,76 @@
 
             const labelIndex = findSelectionAtLabel(mx, my);
             if (labelIndex >= 0) {
-                // Rename
-                editingSelectionIndex = labelIndex;
-                const sel = selections[labelIndex];
-                modalTitle.textContent = 'Rename Sprite';
-                selectionInfoDiv.textContent = `Coordinates: ${formatCoords(sel.x, sel.y, sel.w, sel.h)}`;
-                spriteNameInput.value = sel.name;
-                pendingSelection = null;
-                nameModal.classList.add('show');
-                spriteNameInput.focus();
-                spriteNameInput.select();
+                startInlineEdit(labelIndex);
             }
         });
 
-        // Modal handlers
-        saveNameBtn.addEventListener('click', saveSelection);
-        cancelNameBtn.addEventListener('click', closeModal);
+        function startInlineEdit(index) {
+            // Remove any existing inline edit
+            cancelInlineEdit();
 
-        spriteNameInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                saveSelection();
-            } else if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
+            editingSelectionIndex = index;
+            const sel = selections[index];
 
-        function closeModal() {
-            nameModal.classList.remove('show');
-            pendingSelection = null;
-            editingSelectionIndex = -1;
+            // Calculate position of the label
+            const x = offsetX + sel.x * zoom;
+            const y = offsetY + sel.y * zoom;
+
+            // Create input element
+            inlineEditInput = document.createElement('input');
+            inlineEditInput.type = 'text';
+            inlineEditInput.value = sel.name;
+            inlineEditInput.style.cssText = `
+                position: absolute;
+                left: ${x}px;
+                top: ${y - 20}px;
+                font: bold 12px monospace;
+                background: #16213e;
+                color: #4ecca3;
+                border: 2px solid #4ecca3;
+                padding: 2px 4px;
+                border-radius: 2px;
+                outline: none;
+                z-index: 200;
+                min-width: 60px;
+            `;
+
+            inlineEditInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    finishInlineEdit();
+                } else if (e.key === 'Escape') {
+                    cancelInlineEdit();
+                }
+                e.stopPropagation();
+            });
+
+            inlineEditInput.addEventListener('blur', () => {
+                finishInlineEdit();
+            });
+
+            container.appendChild(inlineEditInput);
+            inlineEditInput.focus();
+            inlineEditInput.select();
         }
 
-        function saveSelection() {
-            const name = spriteNameInput.value.trim() || `sprite${selections.length + 1}`;
-
-            if (editingSelectionIndex >= 0) {
-                // Rename existing
-                selections[editingSelectionIndex].name = name;
-                showToast('Name updated');
-            } else if (pendingSelection) {
-                // New selection
-                selections.push({
-                    name,
-                    x: pendingSelection.x,
-                    y: pendingSelection.y,
-                    w: pendingSelection.w,
-                    h: pendingSelection.h
-                });
-                showToast('Selection saved');
+        function finishInlineEdit() {
+            if (inlineEditInput && editingSelectionIndex >= 0) {
+                const newName = inlineEditInput.value.trim();
+                if (newName) {
+                    selections[editingSelectionIndex].name = newName;
+                    updateSelectionsUI();
+                    draw();
+                }
             }
+            cancelInlineEdit();
+        }
 
-            closeModal();
-            updateSelectionsUI();
-            draw();
+        function cancelInlineEdit() {
+            if (inlineEditInput && inlineEditInput.parentNode) {
+                inlineEditInput.parentNode.removeChild(inlineEditInput);
+            }
+            inlineEditInput = null;
+            editingSelectionIndex = -1;
         }
 
         // Zoom with wheel - maintains selection origin
@@ -1140,21 +1050,52 @@
                 const div = document.createElement('div');
                 div.className = 'selection-item';
 
-                // Name (double click to edit)
+                // Name (double click to edit inline)
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'name';
                 nameSpan.textContent = sel.name;
                 nameSpan.title = 'Double-click to rename';
                 nameSpan.addEventListener('dblclick', (e) => {
                     e.stopPropagation();
-                    editingSelectionIndex = i;
-                    modalTitle.textContent = 'Rename Sprite';
-                    selectionInfoDiv.textContent = `Coordinates: ${formatCoords(sel.x, sel.y, sel.w, sel.h)}`;
-                    spriteNameInput.value = sel.name;
-                    pendingSelection = null;
-                    nameModal.classList.add('show');
-                    spriteNameInput.focus();
-                    spriteNameInput.select();
+                    // Create inline input in the selections panel
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = sel.name;
+                    input.style.cssText = `
+                        font: inherit;
+                        background: #1a1a2e;
+                        color: #4ecca3;
+                        border: 1px solid #4ecca3;
+                        padding: 2px 4px;
+                        border-radius: 2px;
+                        outline: none;
+                        width: 80px;
+                    `;
+                    input.addEventListener('keydown', (ev) => {
+                        if (ev.key === 'Enter') {
+                            const newName = input.value.trim();
+                            if (newName) {
+                                selections[i].name = newName;
+                            }
+                            updateSelectionsUI();
+                            draw();
+                        } else if (ev.key === 'Escape') {
+                            updateSelectionsUI();
+                        }
+                        ev.stopPropagation();
+                    });
+                    input.addEventListener('blur', () => {
+                        const newName = input.value.trim();
+                        if (newName) {
+                            selections[i].name = newName;
+                        }
+                        updateSelectionsUI();
+                        draw();
+                    });
+                    nameSpan.textContent = '';
+                    nameSpan.appendChild(input);
+                    input.focus();
+                    input.select();
                 });
 
                 // Coordinates (click to copy)
