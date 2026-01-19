@@ -290,7 +290,6 @@
             padding: 8px 16px;
             background: none;
             border: none;
-            color: #e94560;
             cursor: pointer;
             font-size: 13px;
             text-align: left;
@@ -298,6 +297,14 @@
 
         #contextMenu button:hover {
             background: #0f3460;
+        }
+
+        #contextDuplicate {
+            color: #4ecca3;
+        }
+
+        #contextDelete {
+            color: #e94560;
         }
     </style>
 </head>
@@ -339,6 +346,7 @@
     <div id="toast">Copied!</div>
 
     <div id="contextMenu">
+        <button id="contextDuplicate">📋 Duplicate to right</button>
         <button id="contextDelete">🗑 Delete sprite</button>
     </div>
 
@@ -361,6 +369,7 @@
         const toast = document.getElementById('toast');
         const bgOpacitySlider = document.getElementById('bgOpacity');
         const contextMenu = document.getElementById('contextMenu');
+        const contextDuplicateBtn = document.getElementById('contextDuplicate');
         const contextDeleteBtn = document.getElementById('contextDelete');
 
         let img = null;
@@ -1107,18 +1116,25 @@
                     copyToClipboard(`${sel.name}: ${formatCoords(sel.x, sel.y, sel.w, sel.h)},`);
                 });
 
-                // Duplicate
+                // Duplicate (place to the right)
                 const duplicateBtn = document.createElement('button');
                 duplicateBtn.className = 'btn duplicate-btn';
                 duplicateBtn.textContent = '📋';
-                duplicateBtn.title = 'Duplicate';
+                duplicateBtn.title = 'Duplicate to right';
                 duplicateBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const newSel = { ...sel, name: sel.name + '_copy' };
+                    const newX = sel.x + sel.w;
+                    // Clamp to image bounds
+                    const clampedX = img ? Math.min(newX, img.width - sel.w) : newX;
+                    const newSel = {
+                        ...sel,
+                        name: sel.name + '_copy',
+                        x: clampedX
+                    };
                     selections.push(newSel);
                     updateSelectionsUI();
                     draw();
-                    showToast('Selection duplicated');
+                    showToast('Duplicated to right');
                 });
 
                 // Delete
@@ -1470,6 +1486,24 @@
             if (e.key === 'Escape') {
                 hideContextMenu();
             }
+        });
+
+        contextDuplicateBtn.addEventListener('click', () => {
+            if (contextMenuTargetIndex >= 0) {
+                const sel = selections[contextMenuTargetIndex];
+                const newX = sel.x + sel.w;
+                const clampedX = img ? Math.min(newX, img.width - sel.w) : newX;
+                const newSel = {
+                    ...sel,
+                    name: sel.name + '_copy',
+                    x: clampedX
+                };
+                selections.push(newSel);
+                updateSelectionsUI();
+                draw();
+                showToast('Duplicated to right');
+            }
+            hideContextMenu();
         });
 
         contextDeleteBtn.addEventListener('click', () => {
