@@ -163,6 +163,20 @@
             font-weight: bold;
         }
 
+        #autoDetect {
+            background: #0f3460;
+            color: #4ecca3;
+            border: 1px solid #4ecca3;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #autoDetect:hover {
+            background: #1a4a7a;
+        }
+
         #formatToggle {
             background: #0f3460;
             color: #4ecca3;
@@ -332,6 +346,37 @@
             margin-bottom: 10px;
             font-size: 14px;
         }
+
+        #contextMenu {
+            position: fixed;
+            background: #16213e;
+            border: 1px solid #4ecca3;
+            border-radius: 4px;
+            padding: 4px 0;
+            z-index: 400;
+            display: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        #contextMenu.show {
+            display: block;
+        }
+
+        #contextMenu button {
+            display: block;
+            width: 100%;
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: #e94560;
+            cursor: pointer;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        #contextMenu button:hover {
+            background: #0f3460;
+        }
     </style>
 </head>
 <body>
@@ -360,6 +405,7 @@
     <div id="output">
         <div style="display: flex; align-items: center; margin-bottom: 8px; gap: 10px;">
             <h3 style="margin: 0;">Selections</h3>
+            <button id="autoDetect">🔍 Auto-detect</button>
             <span class="format-label">Format:</span>
             <button id="formatToggle">[x, y, w, h]</button>
             <button id="clearAll">🗑 Clear</button>
@@ -382,6 +428,10 @@
         </div>
     </div>
 
+    <div id="contextMenu">
+        <button id="contextDelete">🗑 Delete sprite</button>
+    </div>
+
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -396,6 +446,7 @@
         const selectionsDiv = document.getElementById('selections');
         const copyAllBtn = document.getElementById('copyAll');
         const clearAllBtn = document.getElementById('clearAll');
+        const autoDetectBtn = document.getElementById('autoDetect');
         const formatToggleBtn = document.getElementById('formatToggle');
         const toast = document.getElementById('toast');
         const nameModal = document.getElementById('nameModal');
@@ -405,8 +456,11 @@
         const saveNameBtn = document.getElementById('saveName');
         const cancelNameBtn = document.getElementById('cancelName');
         const bgOpacitySlider = document.getElementById('bgOpacity');
+        const contextMenu = document.getElementById('contextMenu');
+        const contextDeleteBtn = document.getElementById('contextDelete');
 
         let img = null;
+        let contextMenuTargetIndex = -1;
         let bgOpacity = 0.5;
         let zoom = 1;
         let offsetX = 0;
@@ -902,6 +956,7 @@
                 const h = Math.abs(selEndPixelY - selStartPixelY);
 
                 if (w > 1 && h > 1) {
+                    // Normal drag selection
                     pendingSelection = { x, y, w, h };
                     editingSelectionIndex = -1;
                     modalTitle.textContent = 'Sprite Name';
@@ -910,6 +965,25 @@
                     nameModal.classList.add('show');
                     spriteNameInput.focus();
                     spriteNameInput.select();
+                } else if (img) {
+                    // Single click - detect sprite at this pixel
+                    const clickX = selStartPixelX;
+                    const clickY = selStartPixelY;
+
+                    // Check if click is inside image bounds
+                    if (clickX >= 0 && clickX < img.width && clickY >= 0 && clickY < img.height) {
+                        const detected = detectSpriteAt(clickX, clickY);
+                        if (detected) {
+                            pendingSelection = detected;
+                            editingSelectionIndex = -1;
+                            modalTitle.textContent = 'Sprite Name';
+                            selectionInfoDiv.textContent = `Coordinates: ${formatCoords(detected.x, detected.y, detected.w, detected.h)}`;
+                            spriteNameInput.value = `sprite${selections.length + 1}`;
+                            nameModal.classList.add('show');
+                            spriteNameInput.focus();
+                            spriteNameInput.select();
+                        }
+                    }
                 }
 
                 drawOverlay();
@@ -1111,6 +1185,153 @@
             }
         });
 
+        // Detect sprite at a specific pixel using flood fill
+        function detectSpriteAt(clickX, clickY) {
+            if (!img) return null;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+
+            // Check if clicked pixel is transparent
+            const clickIdx = (clickY * img.width + clickX) * 4;
+            if (data[clickIdx + 3] < 128) {
+                return null; // Clicked on transparent pixel
+            }
+
+            const visited = new Array(img.width * img.height).fill(false);
+
+            function isTransparent(x, y) {
+                if (x < 0 || x >= img.width || y < 0 || y >= img.height) return true;
+                const idx = (y * img.width + x) * 4;
+                return data[idx + 3] < 128;
+            }
+
+            const stack = [[clickX, clickY]];
+            let minX = clickX, maxX = clickX, minY = clickY, maxY = clickY;
+
+            while (stack.length > 0) {
+                const [x, y] = stack.pop();
+                const idx = y * img.width + x;
+
+                if (x < 0 || x >= img.width || y < 0 || y >= img.height) continue;
+                if (visited[idx]) continue;
+                if (isTransparent(x, y)) continue;
+
+                visited[idx] = true;
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+
+                stack.push([x + 1, y]);
+                stack.push([x - 1, y]);
+                stack.push([x, y + 1]);
+                stack.push([x, y - 1]);
+            }
+
+            const w = maxX - minX + 1;
+            const h = maxY - minY + 1;
+
+            if (w >= 2 && h >= 2) {
+                return { x: minX, y: minY, w, h };
+            }
+            return null;
+        }
+
+        // Auto-detect sprites
+        autoDetectBtn.addEventListener('click', () => {
+            if (!img) {
+                showToast('Load an image first');
+                return;
+            }
+
+            // Create temporary canvas to read pixel data
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = img.width;
+            tempCanvas.height = img.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(img, 0, 0);
+            const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+            const data = imageData.data;
+
+            // Create visited array
+            const visited = new Array(img.width * img.height).fill(false);
+
+            // Check if pixel is transparent (alpha < 128)
+            function isTransparent(x, y) {
+                if (x < 0 || x >= img.width || y < 0 || y >= img.height) return true;
+                const idx = (y * img.width + x) * 4;
+                return data[idx + 3] < 128;
+            }
+
+            // Flood fill to find connected non-transparent pixels
+            function floodFill(startX, startY) {
+                const stack = [[startX, startY]];
+                let minX = startX, maxX = startX, minY = startY, maxY = startY;
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const idx = y * img.width + x;
+
+                    if (x < 0 || x >= img.width || y < 0 || y >= img.height) continue;
+                    if (visited[idx]) continue;
+                    if (isTransparent(x, y)) continue;
+
+                    visited[idx] = true;
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
+
+                    stack.push([x + 1, y]);
+                    stack.push([x - 1, y]);
+                    stack.push([x, y + 1]);
+                    stack.push([x, y - 1]);
+                }
+
+                return { minX, maxX, minY, maxY };
+            }
+
+            // Find all sprites
+            const detectedSprites = [];
+            for (let y = 0; y < img.height; y++) {
+                for (let x = 0; x < img.width; x++) {
+                    const idx = y * img.width + x;
+                    if (!visited[idx] && !isTransparent(x, y)) {
+                        const bounds = floodFill(x, y);
+                        const w = bounds.maxX - bounds.minX + 1;
+                        const h = bounds.maxY - bounds.minY + 1;
+                        // Filter out very small sprites (noise)
+                        if (w >= 2 && h >= 2) {
+                            detectedSprites.push({
+                                name: `sprite${selections.length + detectedSprites.length + 1}`,
+                                x: bounds.minX,
+                                y: bounds.minY,
+                                w: w,
+                                h: h
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (detectedSprites.length === 0) {
+                showToast('No sprites detected');
+                return;
+            }
+
+            // Add detected sprites to selections
+            selections.push(...detectedSprites);
+            updateSelectionsUI();
+            draw();
+            showToast(`Detected ${detectedSprites.length} sprites`);
+        });
+
         function copyToClipboard(text) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(text).then(() => {
@@ -1148,7 +1369,49 @@
             draw();
         });
 
-        container.addEventListener('contextmenu', e => e.preventDefault());
+        // Right-click context menu
+        container.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const rect = container.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            const labelIndex = findSelectionAtLabel(mx, my);
+            if (labelIndex >= 0) {
+                contextMenuTargetIndex = labelIndex;
+                contextMenu.style.left = e.clientX + 'px';
+                contextMenu.style.top = e.clientY + 'px';
+                contextMenu.classList.add('show');
+            } else {
+                hideContextMenu();
+            }
+        });
+
+        function hideContextMenu() {
+            contextMenu.classList.remove('show');
+            contextMenuTargetIndex = -1;
+        }
+
+        // Hide context menu on click elsewhere
+        document.addEventListener('click', () => {
+            hideContextMenu();
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                hideContextMenu();
+            }
+        });
+
+        contextDeleteBtn.addEventListener('click', () => {
+            if (contextMenuTargetIndex >= 0) {
+                selections.splice(contextMenuTargetIndex, 1);
+                updateSelectionsUI();
+                draw();
+                showToast('Sprite deleted');
+            }
+            hideContextMenu();
+        });
 
         resizeCanvases();
     </script>
