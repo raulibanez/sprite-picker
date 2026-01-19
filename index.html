@@ -560,10 +560,10 @@
             ctx.fillStyle = '#1a1a2e';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Transparency pattern
+            // Transparency pattern - use same coordinates as image
             const patternSize = Math.max(8, 8 * zoom);
-            const imgX = Math.floor(offsetX);
-            const imgY = Math.floor(offsetY);
+            const imgX = offsetX;
+            const imgY = offsetY;
             const imgW = img.width * zoom;
             const imgH = img.height * zoom;
 
@@ -583,6 +583,12 @@
                 dark = Math.round(42 + (255 - 42) * t);
                 light = Math.round(58 + (255 - 58) * t);
             }
+            // Clip to image bounds so pattern doesn't overflow
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(imgX, imgY, imgW, imgH);
+            ctx.clip();
+
             ctx.fillStyle = `rgb(${dark}, ${dark}, ${Math.min(255, dark + 16)})`;
             ctx.fillRect(imgX, imgY, imgW, imgH);
             ctx.fillStyle = `rgb(${light}, ${light}, ${Math.min(255, light + 16)})`;
@@ -592,6 +598,8 @@
                     ctx.fillRect(imgX + x + patternSize, imgY + y + patternSize, patternSize, patternSize);
                 }
             }
+
+            ctx.restore();
 
             // Draw image
             ctx.drawImage(img, offsetX, offsetY, img.width * zoom, img.height * zoom);
